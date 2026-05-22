@@ -18,6 +18,7 @@ from pdf_renderer import save_report
 
 # ── Config ──
 ETSY_WEBHOOK_SECRET = os.environ.get("ETSY_WEBHOOK_SECRET", "")
+GUMROAD_WEBHOOK_SECRET = os.environ.get("GUMROAD_WEBHOOK_SECRET", "")
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "reports@yourdomain.com")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD", "")
 SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
@@ -155,7 +156,20 @@ def parse_personalization(text: str) -> Optional[dict]:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+    from pathlib import Path
+    import os
+    cwd = os.getcwd()
+    reports_dir = Path(__file__).parent / "reports"
+    reports_exist = reports_dir.exists()
+    files = [str(f.name) for f in reports_dir.iterdir()] if reports_exist else []
+    return {
+        "status": "ok",
+        "timestamp": datetime.now().isoformat(),
+        "cwd": cwd,
+        "reports_dir": str(reports_dir),
+        "reports_dir_exists": reports_exist,
+        "report_files": files,
+    }
 
 
 @app.post("/webhook/etsy")
@@ -178,6 +192,139 @@ async def etsy_webhook(request: Request):
     executor.submit(process_etsy_order, receipt_id)
 
     return {"status": "accepted", "receipt_id": receipt_id}
+
+
+# ── Gumroad Webhook ──
+
+@app.post("/webhook/gumroad")
+async def gumroad_webhook(request: Request):
+    """Receive Gumroad sale webhook and trigger report generation"""
+    raw_body = await request.body()
+    payload = json.loads(raw_body)
+    sale_id = payload.get("sale_id", "")
+    email = payload.get("email", "")
+
+    if not sale_id:
+        logger.warning("Gumroad webhook received without sale_id")
+        return {"status": "ignored", "reason": "missing sale_id"}
+
+    logger.info(f"Received Gumroad webhook for sale #{sale_id}")
+
+    # Optional: verify Gumroad webhook signature
+    gumroad_signature = request.headers.get("x-gumroad-signature", "")
+    if GUMROAD_WEBHOOK_SECRET and gumroad_signature:
+        expected = hmac.new(
+            GUMROAD_WEBHOOK_SECRET.encode(),
+            raw_body,
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(expected, gumroad_signature):
+            logger.warning(f"Invalid Gumroad signature for sale {sale_id}")
+            raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+    # Parse custom_fields
+    order_data = parse_gumroad_custom_fields(payload, sale_id, email)
+    if order_data is None:
+        logger.error(f"Failed to parse Gumroad custom fields for sale {sale_id}")
+        return {"status": "error", "reason": "invalid custom_fields"}
+
+    # Process in background thread (same pattern as Etsy webhook)
+    from concurrent.futures import ThreadPoolExecutor
+    executor = ThreadPoolExecutor()
+    executor.submit(process_gumroad_order, order_data)
+
+    return {"status": "accepted", "sale_id": sale_id}
+
+
+def parse_gumroad_custom_fields(payload: dict, sale_id: str, email: str) -> Optional[OrderData]:
+    """Parse Gumroad custom_fields array into OrderData.
+
+    Gumroad custom_fields format:
+    [
+      {"name": "Name", "value": "John"},
+      {"name": "Birth Date", "value": "1990-05-15"},
+      {"name": "Birth Time", "value": "10:30"},
+      {"name": "Gender", "value": "Male"}
+    ]
+    """
+    custom_fields = payload.get("custom_fields", [])
+    if not custom_fields:
+        logger.warning("Gumroad payload has no custom_fields")
+        return None
+
+    # Build a lookup dict from the custom_fields array
+    fields = {}
+    for cf in custom_fields:
+        name = cf.get("name", "").strip().lower()
+        value = cf.get("value", "").strip()
+        fields[name] = value
+
+    client_name = fields.get("name", "")
+    birth_date_str = fields.get("birth date", "")
+    birth_time_str = fields.get("birth time", "")
+    gender = fields.get("gender", "")
+
+    if not client_name or not birth_date_str:
+        logger.warning("Gumroad custom_fields missing name or birth date")
+        return None
+
+    # Parse birth date (YYYY-MM-DD)
+    birth_parts = birth_date_str.split("-")
+    if len(birth_parts) != 3:
+        logger.warning(f"Gumroad birth date format invalid: {birth_date_str}")
+        return None
+
+    try:
+        birth_year = int(birth_parts[0])
+        birth_month = int(birth_parts[1])
+        birth_day = int(birth_parts[2])
+    except (ValueError, IndexError):
+        logger.warning(f"Gumroad birth date values not integers: {birth_date_str}")
+        return None
+
+    # Parse birth time (HH:MM, optional)
+    birth_hour = 12
+    birth_minute = 0
+    if birth_time_str:
+        time_parts = birth_time_str.split(":")
+        try:
+            birth_hour = int(time_parts[0]) if time_parts else 12
+            birth_minute = int(time_parts[1]) if len(time_parts) > 1 else 0
+        except (ValueError, IndexError):
+            logger.warning(f"Gumroad birth time format invalid: {birth_time_str}, defaulting to 12:00")
+
+    # Normalize gender
+    gender_lower = gender.lower().strip() if gender else ""
+    if gender_lower in ("male", "m"):
+        gender = "male"
+    elif gender_lower in ("female", "f"):
+        gender = "female"
+    else:
+        gender = "male"
+
+    return OrderData(
+        order_id=f"gu-{sale_id}",
+        client_name=client_name,
+        birth_year=birth_year,
+        birth_month=birth_month,
+        birth_day=birth_day,
+        birth_hour=birth_hour,
+        birth_minute=birth_minute,
+        gender=gender,
+        buyer_email=email,
+        focus="comprehensive",
+    )
+
+
+def process_gumroad_order(order: OrderData):
+    """Background processing of a Gumroad order"""
+    pdf_path = generate_report_pdf(order)
+    if pdf_path:
+        download_url = f"{REPORT_BASE_URL}/download/{order.order_id}"
+        logger.info(f"Gumroad report generated for order {order.order_id}: {download_url}")
+        # Email delivery will be added later
+    else:
+        logger.error(f"Failed to generate Gumroad report for order {order.order_id}")
 
 
 async def fetch_etsy_receipt(receipt_id: int) -> Optional[OrderData]:
@@ -227,13 +374,25 @@ async def fetch_etsy_receipt(receipt_id: int) -> Optional[OrderData]:
 
 @app.post("/process")
 async def process_order(order: OrderData):
-    """API endpoint to manually trigger report generation (for testing)"""
-    result = generate_report_pdf(order)
-    return {
-        "status": "completed",
-        "order_id": order.order_id,
-        "pdf_path": result,
-    }
+    """API endpoint to manually trigger report generation (for testing, runs in background)"""
+    from concurrent.futures import ThreadPoolExecutor
+    executor = ThreadPoolExecutor()
+    future = executor.submit(generate_report_pdf, order)
+
+    try:
+        result = future.result(timeout=120)
+        return {
+            "status": "completed",
+            "order_id": order.order_id,
+            "pdf_path": result,
+        }
+    except Exception as e:
+        logger.error(f"Process order failed: {e}")
+        return {
+            "status": "processing",
+            "order_id": order.order_id,
+            "message": "Report is being generated in the background. Check /download/TEST-001 in a minute.",
+        }
 
 
 def process_etsy_order(receipt_id: int):
@@ -295,7 +454,7 @@ def generate_report_pdf(order: OrderData) -> str:
 from fastapi.responses import FileResponse
 from pathlib import Path
 
-REPORTS_DIR = Path(__file__).parent.parent / "reports"
+REPORTS_DIR = Path(__file__).parent / "reports"
 
 
 @app.get("/download/{order_id}")
