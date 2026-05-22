@@ -111,10 +111,16 @@ The BaZi Reading Team
     msg["To"] = to_email
 
     try:
-        with smtplib.SMTP(cfg["server"], cfg["port"]) as server:
-            server.starttls()
-            server.login(cfg["sender"], cfg["password"])
-            server.send_message(msg)
+        port = cfg["port"]
+        if port == 465:
+            with smtplib.SMTP_SSL(cfg["server"], port) as server:
+                server.login(cfg["sender"], cfg["password"])
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(cfg["server"], port) as server:
+                server.starttls()
+                server.login(cfg["sender"], cfg["password"])
+                server.send_message(msg)
         logger.info(f"Email sent to {to_email} for order {order_id}")
     except Exception as e:
         logger.error(f"Failed to send email: {e}")
@@ -169,14 +175,83 @@ def health():
     reports_dir = Path(__file__).parent / "reports"
     reports_exist = reports_dir.exists()
     files = [str(f.name) for f in reports_dir.iterdir()] if reports_exist else []
+    cfg = _email_config()
     return {
         "status": "ok",
         "timestamp": datetime.now().isoformat(),
-        "cwd": cwd,
+        "email_configured": bool(cfg["password"]),
+        "email_sender": cfg["sender"],
+        "smtp_server": cfg["server"],
+        "smtp_port": cfg["port"],
         "reports_dir": str(reports_dir),
         "reports_dir_exists": reports_exist,
         "report_files": files,
     }
+
+
+@app.get("/diagnose/email")
+def diagnose_email():
+    """Test SMTP connectivity and report result"""
+    cfg = _email_config()
+    result = {
+        "config": {
+            "sender": cfg["sender"],
+            "server": cfg["server"],
+            "port": cfg["port"],
+            "password_set": bool(cfg["password"]),
+        }
+    }
+    if not cfg["password"]:
+        result["error"] = "SENDER_PASSWORD not set"
+        return result
+
+    import smtplib
+    import socket
+
+    # Test DNS resolution
+    try:
+        ip = socket.getaddrinfo(cfg["server"], cfg["port"])[0][4][0]
+        result["dns"] = f"{cfg['server']} → {ip}"
+    except Exception as e:
+        result["dns_error"] = str(e)
+        return result
+
+    # Test SMTP connection
+    try:
+        if cfg["port"] == 465:
+            server = smtplib.SMTP_SSL(cfg["server"], cfg["port"], timeout=15)
+        else:
+            server = smtplib.SMTP(cfg["server"], cfg["port"], timeout=15)
+            server.starttls()
+        result["connect"] = "OK"
+    except Exception as e:
+        result["connect_error"] = str(e)
+        return result
+
+    # Test login
+    try:
+        server.login(cfg["sender"], cfg["password"])
+        result["login"] = "OK"
+    except Exception as e:
+        result["login_error"] = str(e)
+        server.quit()
+        return result
+
+    # Test send
+    try:
+        from email.mime.text import MIMEText
+        msg = MIMEText("This is a diagnostic test from the BaZi server.")
+        msg["Subject"] = "Diagnostic test from Railway"
+        msg["From"] = cfg["sender"]
+        msg["To"] = cfg["sender"]
+        server.send_message(msg)
+        result["send"] = "OK"
+    except Exception as e:
+        result["send_error"] = str(e)
+    finally:
+        server.quit()
+
+    return result
 
 
 @app.post("/webhook/etsy")
