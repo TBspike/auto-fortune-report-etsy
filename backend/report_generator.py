@@ -20,7 +20,7 @@ def get_report_prompt(bazi: BaziResult, name: str, gender: str,
     """生成报告提示词 — 基于共享知识库的专业技法"""
     elements_desc = ", ".join([f"{k}: {v}" for k, v in bazi.five_elements.items()])
     nayin_desc = ", ".join(bazi.nayin)
-    luck_desc = ", ".join(bazi.great_luck[:6])
+    luck_desc = ", ".join(luck["pillar"] for luck in bazi.great_luck[:6])
 
     return f"""You are a professional Chinese BaZi (Four Pillars of Destiny) consultant.
 Write a comprehensive, personalized BaZi reading report for a client.
@@ -171,7 +171,7 @@ with partners, family, and colleagues.
 Your Luck Cycle direction is {bazi.luck_direction}, with your first cycle beginning at age {bazi.luck_start_age}.
 
 Your Great Luck Cycles:
-{chr(10).join([f'  • {luck}' for luck in bazi.great_luck[:8]])}
+{chr(10).join([f'  • {luck["pillar"]} ({luck["age_range"]}岁)' for luck in bazi.great_luck[:8]])}
 
 Each 10-year cycle activates different aspects of your chart, creating favorable periods
 for different life pursuits. Understanding where you are in this cycle helps you
