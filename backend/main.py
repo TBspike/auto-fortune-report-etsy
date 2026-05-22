@@ -16,14 +16,20 @@ from bazi_engine import calculate_bazi
 from report_generator import create_report
 from pdf_renderer import save_report
 
-# ── Config ──
+# ── Config (module-level — loaded once at import, rarely changed) ──
 ETSY_WEBHOOK_SECRET = os.environ.get("ETSY_WEBHOOK_SECRET", "")
 GUMROAD_WEBHOOK_SECRET = os.environ.get("GUMROAD_WEBHOOK_SECRET", "")
-SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "reports@yourdomain.com")
-SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD", "")
-SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 REPORT_BASE_URL = os.environ.get("REPORT_BASE_URL", "http://localhost:8000")
+
+
+def _email_config():
+    """Read email config from env at call time (not module load time)"""
+    return {
+        "sender": os.environ.get("SENDER_EMAIL", ""),
+        "password": os.environ.get("SENDER_PASSWORD", ""),
+        "server": os.environ.get("SMTP_SERVER", "smtp.qq.com"),
+        "port": int(os.environ.get("SMTP_PORT", "587")),
+    }
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -74,8 +80,9 @@ def verify_etsy_webhook(payload: bytes, signature: str) -> bool:
 # ── Email Delivery ──
 
 def send_report_email(to_email: str, download_url: str, order_id: str, client_name: str):
-    """Send PDF download link to buyer via email"""
-    if not SENDER_PASSWORD:
+    """Send PDF download link to buyer via email (config read from env at call time)"""
+    cfg = _email_config()
+    if not cfg["password"]:
         logger.info(f"[EMAIL MOCK] To: {to_email}, URL: {download_url}")
         return
 
@@ -100,13 +107,13 @@ The BaZi Reading Team
 
     msg = MIMEText(body)
     msg["Subject"] = subject
-    msg["From"] = SENDER_EMAIL
+    msg["From"] = cfg["sender"]
     msg["To"] = to_email
 
     try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        with smtplib.SMTP(cfg["server"], cfg["port"]) as server:
             server.starttls()
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.login(cfg["sender"], cfg["password"])
             server.send_message(msg)
         logger.info(f"Email sent to {to_email} for order {order_id}")
     except Exception as e:
