@@ -6,10 +6,13 @@ import os
 from typing import Dict, Optional
 from bazi_engine import BaziResult, calculate_bazi
 
-# Default API config — user to override with env vars
-LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
-LLM_API_URL = os.environ.get("LLM_API_URL", "https://api.deepseek.com/v1/chat/completions")
-LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
+def _llm_config():
+    """Read LLM config from env at call time (not module load time)"""
+    return {
+        "api_key": os.environ.get("LLM_API_KEY", ""),
+        "api_url": os.environ.get("LLM_API_URL", "https://api.deepseek.com/v1/chat/completions"),
+        "model": os.environ.get("LLM_MODEL", "deepseek-chat"),
+    }
 
 
 def get_report_prompt(bazi: BaziResult, name: str, gender: str,
@@ -58,21 +61,22 @@ OUTPUT ONLY THE REPORT CONTENT. No preamble, no explanation.
 
 
 def generate_report_via_api(prompt: str) -> Optional[str]:
-    """调用 LLM API 生成报告"""
-    if not LLM_API_KEY:
+    """调用 LLM API 生成报告（配置从环境变量实时读取）"""
+    cfg = _llm_config()
+    if not cfg["api_key"]:
         # Fallback: return a template-based report when no API key
         return None
 
     import requests
     try:
         resp = requests.post(
-            LLM_API_URL,
+            cfg["api_url"],
             headers={
-                "Authorization": f"Bearer {LLM_API_KEY}",
+                "Authorization": f"Bearer {cfg['api_key']}",
                 "Content-Type": "application/json",
             },
             json={
-                "model": LLM_MODEL,
+                "model": cfg["model"],
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.7,
                 "max_tokens": 4000,
