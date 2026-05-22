@@ -210,6 +210,11 @@ async def gumroad_webhook(request: Request):
 
     logger.info(f"Received Gumroad webhook for sale #{sale_id}")
 
+    # Log full payload for debugging (first time only)
+    if sale_id == "test_ping":
+        logger.info(f"Gumroad test ping payload: {json.dumps(payload, indent=2)[:2000]}")
+        return {"status": "ok", "note": "test ping received (no report generated)"}
+
     # Optional: verify Gumroad webhook signature
     gumroad_signature = request.headers.get("x-gumroad-signature", "")
     if GUMROAD_WEBHOOK_SECRET and gumroad_signature:
@@ -226,9 +231,9 @@ async def gumroad_webhook(request: Request):
     order_data = parse_gumroad_custom_fields(payload, sale_id, email)
     if order_data is None:
         logger.error(f"Failed to parse Gumroad custom fields for sale {sale_id}")
-        return {"status": "error", "reason": "invalid custom_fields"}
+        return {"status": "error", "reason": "missing or invalid custom_fields"}
 
-    # Process in background thread (same pattern as Etsy webhook)
+    # Process in background thread
     from concurrent.futures import ThreadPoolExecutor
     executor = ThreadPoolExecutor()
     executor.submit(process_gumroad_order, order_data)
@@ -239,33 +244,47 @@ async def gumroad_webhook(request: Request):
 def parse_gumroad_custom_fields(payload: dict, sale_id: str, email: str) -> Optional[OrderData]:
     """Parse Gumroad custom_fields array into OrderData.
 
-    Gumroad custom_fields format:
+    Gumroad sends custom_fields as:
     [
-      {"name": "Name", "value": "John"},
-      {"name": "Birth Date", "value": "1990-05-15"},
-      {"name": "Birth Time", "value": "10:30"},
-      {"name": "Gender", "value": "Male"}
+      {"name": "Full Name", "value": "John", "type": "short-answer"},
+      {"name": "Birth Date (YYYY-MM-DD)", "value": "1990-05-15", ...},
+      ...
     ]
+    The 'name' field is the Gumroad Input block's label (exact text you entered).
     """
     custom_fields = payload.get("custom_fields", [])
     if not custom_fields:
-        logger.warning("Gumroad payload has no custom_fields")
+        logger.warning(f"Gumroad payload has no custom_fields (sale {sale_id})")
         return None
 
     # Build a lookup dict from the custom_fields array
-    fields = {}
+    raw_fields = {}
     for cf in custom_fields:
         name = cf.get("name", "").strip().lower()
         value = cf.get("value", "").strip()
-        fields[name] = value
+        raw_fields[name] = value
 
-    client_name = fields.get("name", "")
-    birth_date_str = fields.get("birth date", "")
-    birth_time_str = fields.get("birth time", "")
-    gender = fields.get("gender", "")
+    # Fuzzy match — Gumroad uses the label text verbatim as field name
+    client_name = ""
+    birth_date_str = ""
+    birth_time_str = ""
+    gender = ""
+
+    for key, value in raw_fields.items():
+        if not value:
+            continue
+        kl = key.lower()
+        if "full name" in kl or kl == "name":
+            client_name = value
+        elif "birth date" in kl or "birthday" in kl or "birthday" in kl:
+            birth_date_str = value
+        elif "birth time" in kl or "birthtime" in kl:
+            birth_time_str = value
+        elif "gender" in kl:
+            gender = value
 
     if not client_name or not birth_date_str:
-        logger.warning("Gumroad custom_fields missing name or birth date")
+        logger.warning(f"Gumroad custom_fields missing name or birth date. Raw keys: {list(raw_fields.keys())}")
         return None
 
     # Parse birth date (YYYY-MM-DD)
