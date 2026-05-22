@@ -27,8 +27,8 @@ class BaziResult:
     nayin: List[str]       # 纳音
     luck_start_age: int    # 起运年龄
     luck_direction: str    # 大运顺逆
-    great_luck: List[str]  # 大运
-    current_luck: str      # 当前大运
+    great_luck: List[dict]  # 大运
+    current_luck: dict     # 当前大运
     shens: Dict            # 神煞
 
 
@@ -94,10 +94,19 @@ def calculate_bazi(year: int, month: int, day: int, hour: int, minute: int = 0,
     forward = yun.isForward()
     luck_direction = "顺排" if forward else "逆排"
     luck_cycles = yun.getDaYun()
-    great_luck = [dy.getGanZhi() for dy in luck_cycles if dy.getGanZhi()]
+    great_luck = []
+    for dy in luck_cycles:
+        gz = dy.getGanZhi()
+        if gz and len(gz) == 2:
+            great_luck.append({
+                "age_range": f"{dy.getStartAge()}-{dy.getEndAge()}",
+                "pillar": gz,
+                "stem": gz[0],
+                "branch": gz[1],
+            })
 
     # 当前大运（第一个有意义的大运）
-    current_luck = great_luck[0] if great_luck else ""
+    current_luck = great_luck[0] if great_luck else {"pillar": "", "stem": "", "branch": "", "age_range": ""}
 
     # 神煞
     shens = {}
