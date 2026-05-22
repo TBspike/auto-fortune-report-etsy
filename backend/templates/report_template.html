@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BaZi Reading Report - {{ name }}</title>
+<style>
+    /* ===== Reset & Base ===== */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    @page {
+        size: A4;
+        margin: 0;
+    }
+
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        color: #2c2c2c;
+        background: #f5f3f0;
+        line-height: 1.7;
+    }
+
+    /* ===== Cover Page ===== */
+    .cover-page {
+        width: 210mm;
+        height: 297mm;
+        page-break-after: always;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background: linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        color: #f5f3f0;
+        text-align: center;
+        padding: 40mm 20mm;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .cover-page::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle at 30% 40%, rgba(255,215,0,0.05) 0%, transparent 60%);
+        pointer-events: none;
+    }
+
+    .cover-page::after {
+        content: '☰';
+        position: absolute;
+        bottom: 30mm;
+        right: 25mm;
+        font-size: 60px;
+        opacity: 0.08;
+        color: #ffd700;
+        font-family: serif;
+    }
+
+    .cover-badge {
+        font-size: 11px;
+        letter-spacing: 6px;
+        text-transform: uppercase;
+        color: #ffd700;
+        margin-bottom: 24mm;
+        font-weight: 300;
+    }
+
+    .cover-title {
+        font-size: 42px;
+        font-weight: 300;
+        letter-spacing: 3px;
+        font-family: 'Noto Serif SC', 'Songti SC', 'STSong', serif;
+        margin-bottom: 8mm;
+    }
+
+    .cover-subtitle {
+        font-size: 16px;
+        font-weight: 200;
+        opacity: 0.7;
+        letter-spacing: 5px;
+        margin-bottom: 20mm;
+    }
+
+    .cover-divider {
+        width: 40mm;
+        height: 1px;
+        background: rgba(255,215,0,0.3);
+        margin-bottom: 16mm;
+    }
+
+    .cover-client-name {
+        font-size: 28px;
+        font-weight: 400;
+        letter-spacing: 2px;
+        font-family: 'Noto Serif SC', 'Songti SC', 'STSong', serif;
+        margin-bottom: 6mm;
+    }
+
+    .cover-date {
+        font-size: 12px;
+        opacity: 0.5;
+        letter-spacing: 2px;
+    }
+
+    .cover-order-id {
+        position: absolute;
+        bottom: 18mm;
+        font-size: 9px;
+        opacity: 0.25;
+        letter-spacing: 1px;
+    }
+
+    /* ===== Content Pages ===== */
+    .content-page {
+        width: 210mm;
+        min-height: 297mm;
+        padding: 25mm 22mm;
+        page-break-after: always;
+        background: #ffffff;
+    }
+
+    .content-page:last-child {
+        page-break-after: auto;
+    }
+
+    .section-title {
+        font-size: 20px;
+        font-weight: 500;
+        font-family: 'Noto Serif SC', 'Songti SC', 'STSong', serif;
+        color: #1a1a2e;
+        border-bottom: 2px solid #d4a853;
+        padding-bottom: 4mm;
+        margin-bottom: 8mm;
+        letter-spacing: 2px;
+    }
+
+    .section-title .section-number {
+        font-size: 12px;
+        color: #d4a853;
+        margin-right: 4px;
+        font-weight: 400;
+    }
+
+    .section-subtitle {
+        font-size: 14px;
+        color: #666;
+        margin-top: -6mm;
+        margin-bottom: 10mm;
+    }
+
+    /* ===== BaZi Pillars Table ===== */
+    .bazi-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 10mm;
+        font-size: 14px;
+    }
+
+    .bazi-table th {
+        background: #1a1a2e;
+        color: #f5f3f0;
+        padding: 8px 12px;
+        font-weight: 400;
+        letter-spacing: 1px;
+        text-align: center;
+        font-size: 12px;
+    }
+
+    .bazi-table td {
+        padding: 12px;
+        text-align: center;
+        border-bottom: 1px solid #eee;
+    }
+
+    .bazi-table .pillar-cell {
+        font-size: 20px;
+        font-weight: 500;
+        font-family: 'Noto Serif SC', 'Songti SC', 'STSong', serif;
+        color: #1a1a2e;
+        background: #faf8f5;
+    }
+
+    .bazi-table .pillar-label {
+        font-size: 11px;
+        color: #999;
+        letter-spacing: 2px;
+    }
+
+    /* ===== Five Elements Grid ===== */
+    .elements-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 8px;
+        margin-bottom: 10mm;
+    }
+
+    .element-card {
+        text-align: center;
+        padding: 10px 6px;
+        border-radius: 4px;
+        background: #faf8f5;
+        border: 1px solid #eee;
+    }
+
+    .element-card .element-name {
+        font-size: 14px;
+        font-weight: 500;
+        color: #1a1a2e;
+        margin-bottom: 4px;
+    }
+
+    .element-card .element-count {
+        font-size: 24px;
+        font-weight: 300;
+        color: #d4a853;
+    }
+
+    .element-card .element-label {
+        font-size: 10px;
+        color: #999;
+    }
+
+    /* ===== Day Master Highlight ===== */
+    .day-master-box {
+        background: linear-gradient(135deg, #faf8f5 0%, #f5f0e8 100%);
+        border: 1px solid #d4a853;
+        border-radius: 4px;
+        padding: 12px 18px;
+        margin-bottom: 10mm;
+        display: inline-block;
+    }
+
+    .day-master-box .label {
+        font-size: 11px;
+        color: #999;
+        letter-spacing: 2px;
+    }
+
+    .day-master-box .value {
+        font-size: 22px;
+        font-weight: 500;
+        font-family: 'Noto Serif SC', 'Songti SC', 'STSong', serif;
+        color: #1a1a2e;
+    }
+
+    /* ===== Luck Cycle List ===== */
+    .luck-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 10mm;
+        font-size: 13px;
+    }
+
+    .luck-table th {
+        background: #1a1a2e;
+        color: #f5f3f0;
+        padding: 8px 12px;
+        font-weight: 400;
+        letter-spacing: 1px;
+        text-align: center;
+        font-size: 11px;
+    }
+
+    .luck-table td {
+        padding: 8px 12px;
+        text-align: center;
+        border-bottom: 1px solid #eee;
+    }
+
+    .luck-table tr:nth-child(even) td {
+        background: #faf8f5;
+    }
+
+    .luck-table .age-range {
+        font-weight: 500;
+        color: #1a1a2e;
+    }
+
+    .luck-table .pillar-name {
+        font-family: 'Noto Serif SC', 'Songti SC', 'STSong', serif;
+        font-size: 16px;
+        color: #1a1a2e;
+    }
+
+    /* ===== Report Body ===== */
+    .report-body {
+        font-size: 13px;
+        line-height: 2;
+        color: #3a3a3a;
+    }
+
+    .report-body p {
+        margin-bottom: 6mm;
+        text-indent: 2em;
+    }
+
+    /* ===== Footer ===== */
+    .page-footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 15mm;
+        padding: 4mm 22mm;
+        border-top: 1px solid #eee;
+        font-size: 8px;
+        color: #bbb;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .page-footer span {
+        display: block;
+        margin-bottom: 2px;
+    }
+
+    /* ===== Print Helper ===== */
+    @media print {
+        body { background: white; }
+        .cover-page { background: linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .bazi-table th { background: #1a1a2e !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .luck-table th { background: #1a1a2e !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .day-master-box { background: linear-gradient(135deg, #faf8f5 0%, #f5f0e8 100%) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .element-card { background: #faf8f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+</style>
+</head>
+<body>
+
+<!-- ===== COVER PAGE ===== -->
+<section class="cover-page">
+    <div class="cover-badge">Fate &amp; Fortune</div>
+    <h1 class="cover-title">BaZi Destiny Report</h1>
+    <p class="cover-subtitle">&#x56DB;&#x67F1;&#x516B;&#x5B57; &middot; Destiny Analysis</p>
+    <div class="cover-divider"></div>
+    <p class="cover-client-name">{{ name }}</p>
+    <p class="cover-date">{{ date }}</p>
+    <p class="cover-order-id">Order #{{ order_id }}</p>
+</section>
+
+<!-- ===== PAGE 1: Bazi Chart ===== -->
+<section class="content-page">
+    <h2 class="section-title"><span class="section-number">01</span> BaZi Chart</h2>
+    <p class="section-subtitle">Four Pillars of Destiny &mdash; &#x56DB;&#x67F1;&#x516B;&#x5B57;</p>
+
+    <table class="bazi-table">
+        <thead>
+            <tr>
+                <th></th>
+                <th>Year Pillar<br><span style="font-size:9px;opacity:0.7;">&#x5E74;&#x67F1;</span></th>
+                <th>Month Pillar<br><span style="font-size:9px;opacity:0.7;">&#x6708;&#x67F1;</span></th>
+                <th>Day Pillar<br><span style="font-size:9px;opacity:0.7;">&#x65E5;&#x67F1;</span></th>
+                <th>Hour Pillar<br><span style="font-size:9px;opacity:0.7;">&#x65F6;&#x67F1;</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="pillar-label">Heavenly Stem<br><span style="font-size:9px;">&#x5929;&#x5E72;</span></td>
+                <td class="pillar-cell">{{ year_pillar.split('-')[0] if '-' in year_pillar else year_pillar }}</td>
+                <td class="pillar-cell">{{ month_pillar.split('-')[0] if '-' in month_pillar else month_pillar }}</td>
+                <td class="pillar-cell">{{ day_pillar.split('-')[0] if '-' in day_pillar else day_pillar }}</td>
+                <td class="pillar-cell">{{ hour_pillar.split('-')[0] if '-' in hour_pillar else hour_pillar }}</td>
+            </tr>
+            <tr>
+                <td class="pillar-label">Earthly Branch<br><span style="font-size:9px;">&#x5730;&#x652F;</span></td>
+                <td class="pillar-cell">{{ year_pillar.split('-')[1] if '-' in year_pillar else '&mdash;' }}</td>
+                <td class="pillar-cell">{{ month_pillar.split('-')[1] if '-' in month_pillar else '&mdash;' }}</td>
+                <td class="pillar-cell">{{ day_pillar.split('-')[1] if '-' in day_pillar else '&mdash;' }}</td>
+                <td class="pillar-cell">{{ hour_pillar.split('-')[1] if '-' in hour_pillar else '&mdash;' }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="day-master-box">
+        <div class="label">Day Master &middot; &#x65E5;&#x4E3B;</div>
+        <div class="value">{{ day_master }}</div>
+    </div>
+
+    <h3 style="font-size:14px;font-weight:500;color:#1a1a2e;margin-bottom:4mm;font-family:'Noto Serif SC','Songti SC','STSong',serif;">
+        Five Elements Distribution &middot; &#x4E94;&#x884C;
+    </h3>
+
+    <div class="elements-grid">
+        <div class="element-card">
+            <div class="element-name">&#x6728; Wood</div>
+            <div class="element-count">{{ elements.get('wood', elements.get('Wood', 0)) }}</div>
+            <div class="element-label">count</div>
+        </div>
+        <div class="element-card">
+            <div class="element-name">&#x706B; Fire</div>
+            <div class="element-count">{{ elements.get('fire', elements.get('Fire', 0)) }}</div>
+            <div class="element-label">count</div>
+        </div>
+        <div class="element-card">
+            <div class="element-name">&#x571F; Earth</div>
+            <div class="element-count">{{ elements.get('earth', elements.get('Earth', 0)) }}</div>
+            <div class="element-label">count</div>
+        </div>
+        <div class="element-card">
+            <div class="element-name">&#x91D1; Metal</div>
+            <div class="element-count">{{ elements.get('metal', elements.get('Metal', 0)) }}</div>
+            <div class="element-label">count</div>
+        </div>
+        <div class="element-card">
+            <div class="element-name">&#x6C34; Water</div>
+            <div class="element-count">{{ elements.get('water', elements.get('Water', 0)) }}</div>
+            <div class="element-label">count</div>
+        </div>
+    </div>
+
+    <div class="page-footer">
+        <span>BaZi Destiny Report &mdash; {{ name }} &mdash; Page 1</span>
+        <span>&copy; 2026 Auto Fortune Report. This report is for reference and entertainment purposes only.</span>
+    </div>
+</section>
+
+<!-- ===== PAGE 2: Luck Cycles ===== -->
+<section class="content-page">
+    <h2 class="section-title"><span class="section-number">02</span> Great Luck Cycles</h2>
+    <p class="section-subtitle">Ten-Year Luck Periods &middot; &#x5927;&#x8FD0;</p>
+
+    <p style="font-size:13px;color:#666;margin-bottom:6mm;">
+        Luck cycle begins at age <strong style="color:#1a1a2e;">{{ luck_start_age }}</strong>.
+    </p>
+
+    <table class="luck-table">
+        <thead>
+            <tr>
+                <th>Age Range</th>
+                <th>Pillar</th>
+                <th>Heavenly Stem</th>
+                <th>Earthly Branch</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cycle in great_luck %}
+            <tr>
+                <td class="age-range">{{ cycle.age_range }}</td>
+                <td class="pillar-name">{{ cycle.pillar }}</td>
+                <td>{{ cycle.stem }}</td>
+                <td>{{ cycle.branch }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        {% if not great_luck %}
+        <p style="text-align:center;color:#999;font-size:13px;padding:20mm 0;">
+            No luck cycle data available.
+        </p>
+        {% endif %}
+
+    <div class="page-footer">
+        <span>BaZi Destiny Report &mdash; {{ name }} &mdash; Page 2</span>
+        <span>&copy; 2026 Auto Fortune Report. This report is for reference and entertainment purposes only.</span>
+    </div>
+</section>
+
+<!-- ===== PAGE 3+: Report Body ===== -->
+<section class="content-page">
+    <h2 class="section-title"><span class="section-number">03</span> Destiny Analysis</h2>
+    <p class="section-subtitle">Personalized Reading &middot; &#x547D;&#x7406;&#x5206;&#x6790;</p>
+
+    <div class="report-body">
+        {% for paragraph in report_body.split('<br>') if report_body %}
+            <p>{{ paragraph }}</p>
+        {% endfor %}
+    </div>
+
+    {% if not report_body %}
+    <p style="text-align:center;color:#999;font-size:13px;padding:20mm 0;">
+        Report content is being generated. Please check back shortly.
+    </p>
+    {% endif %}
+
+    <div class="page-footer">
+        <span>BaZi Destiny Report &mdash; {{ name }} &mdash; Page 3</span>
+        <span>&copy; 2026 Auto Fortune Report. This report is for reference and entertainment purposes only.</span>
+    </div>
+</section>
+
+</body>
+</html>

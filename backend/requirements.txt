@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pydantic
+httpx
+lunar-python
+jinja2
+playwright
+requests
+python-multipart
