@@ -7,3 +7,4 @@ jinja2
 playwright
 requests
 python-multipart
+resend
