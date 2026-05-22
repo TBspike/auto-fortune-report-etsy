@@ -8,8 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
-REPORTS_DIR = Path(__file__).parent.parent / "reports"
-TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
+REPORTS_DIR = Path(__file__).parent / "reports"
+TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
 def render_report_html(report_data: dict) -> str:
