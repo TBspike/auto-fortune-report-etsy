@@ -362,17 +362,17 @@
         <tbody>
             <tr>
                 <td class="pillar-label">Heavenly Stem<br><span style="font-size:9px;">&#x5929;&#x5E72;</span></td>
-                <td class="pillar-cell">{{ year_pillar.split('-')[0] if '-' in year_pillar else year_pillar }}</td>
-                <td class="pillar-cell">{{ month_pillar.split('-')[0] if '-' in month_pillar else month_pillar }}</td>
-                <td class="pillar-cell">{{ day_pillar.split('-')[0] if '-' in day_pillar else day_pillar }}</td>
-                <td class="pillar-cell">{{ hour_pillar.split('-')[0] if '-' in hour_pillar else hour_pillar }}</td>
+                <td class="pillar-cell">{{ year_pillar[0] if year_pillar else '&mdash;' }}</td>
+                <td class="pillar-cell">{{ month_pillar[0] if month_pillar else '&mdash;' }}</td>
+                <td class="pillar-cell">{{ day_pillar[0] if day_pillar else '&mdash;' }}</td>
+                <td class="pillar-cell">{{ hour_pillar[0] if hour_pillar else '&mdash;' }}</td>
             </tr>
             <tr>
                 <td class="pillar-label">Earthly Branch<br><span style="font-size:9px;">&#x5730;&#x652F;</span></td>
-                <td class="pillar-cell">{{ year_pillar.split('-')[1] if '-' in year_pillar else '&mdash;' }}</td>
-                <td class="pillar-cell">{{ month_pillar.split('-')[1] if '-' in month_pillar else '&mdash;' }}</td>
-                <td class="pillar-cell">{{ day_pillar.split('-')[1] if '-' in day_pillar else '&mdash;' }}</td>
-                <td class="pillar-cell">{{ hour_pillar.split('-')[1] if '-' in hour_pillar else '&mdash;' }}</td>
+                <td class="pillar-cell">{{ year_pillar[1] if year_pillar and year_pillar|length > 1 else '&mdash;' }}</td>
+                <td class="pillar-cell">{{ month_pillar[1] if month_pillar and month_pillar|length > 1 else '&mdash;' }}</td>
+                <td class="pillar-cell">{{ day_pillar[1] if day_pillar and day_pillar|length > 1 else '&mdash;' }}</td>
+                <td class="pillar-cell">{{ hour_pillar[1] if hour_pillar and hour_pillar|length > 1 else '&mdash;' }}</td>
             </tr>
         </tbody>
     </table>
