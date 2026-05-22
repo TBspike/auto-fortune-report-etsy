@@ -23,12 +23,10 @@ REPORT_BASE_URL = os.environ.get("REPORT_BASE_URL", "http://localhost:8000")
 
 
 def _email_config():
-    """Read email config from env at call time (not module load time)"""
+    """Read Resend API key from env at call time"""
     return {
-        "sender": os.environ.get("SENDER_EMAIL", ""),
-        "password": os.environ.get("SENDER_PASSWORD", ""),
-        "server": os.environ.get("SMTP_SERVER", "smtp.qq.com"),
-        "port": int(os.environ.get("SMTP_PORT", "587")),
+        "from": os.environ.get("EMAIL_FROM", "onboarding@resend.dev"),
+        "api_key": os.environ.get("RESEND_API_KEY", ""),
     }
 
 logging.basicConfig(level=logging.INFO)
@@ -80,14 +78,14 @@ def verify_etsy_webhook(payload: bytes, signature: str) -> bool:
 # ── Email Delivery ──
 
 def send_report_email(to_email: str, download_url: str, order_id: str, client_name: str):
-    """Send PDF download link to buyer via email (config read from env at call time)"""
+    """Send PDF download link to buyer via Resend API (works on Railway since it uses HTTPS)"""
     cfg = _email_config()
-    if not cfg["password"]:
+    if not cfg["api_key"]:
         logger.info(f"[EMAIL MOCK] To: {to_email}, URL: {download_url}")
         return
 
-    import smtplib
-    from email.mime.text import MIMEText
+    import resend
+    resend.api_key = cfg["api_key"]
 
     subject = f"Your Personal BaZi Reading Report — Order #{order_id}"
     body = f"""Hello {client_name},
@@ -105,23 +103,14 @@ With gratitude,
 The BaZi Reading Team
 """
 
-    msg = MIMEText(body)
-    msg["Subject"] = subject
-    msg["From"] = cfg["sender"]
-    msg["To"] = to_email
-
     try:
-        port = cfg["port"]
-        if port == 465:
-            with smtplib.SMTP_SSL(cfg["server"], port) as server:
-                server.login(cfg["sender"], cfg["password"])
-                server.send_message(msg)
-        else:
-            with smtplib.SMTP(cfg["server"], port) as server:
-                server.starttls()
-                server.login(cfg["sender"], cfg["password"])
-                server.send_message(msg)
-        logger.info(f"Email sent to {to_email} for order {order_id}")
+        r = resend.Emails.send({
+            "from": cfg["from"],
+            "to": [to_email],
+            "subject": subject,
+            "text": body,
+        })
+        logger.info(f"Email sent to {to_email} for order {order_id} (id={r.get('id', '?')})")
     except Exception as e:
         logger.error(f"Failed to send email: {e}")
 
@@ -179,10 +168,8 @@ def health():
     return {
         "status": "ok",
         "timestamp": datetime.now().isoformat(),
-        "email_configured": bool(cfg["password"]),
-        "email_sender": cfg["sender"],
-        "smtp_server": cfg["server"],
-        "smtp_port": cfg["port"],
+        "email_configured": bool(cfg["api_key"]),
+        "email_from": cfg["from"],
         "reports_dir": str(reports_dir),
         "reports_dir_exists": reports_exist,
         "report_files": files,
@@ -191,65 +178,31 @@ def health():
 
 @app.get("/diagnose/email")
 def diagnose_email():
-    """Test SMTP connectivity and report result"""
+    """Test Resend API connectivity"""
     cfg = _email_config()
     result = {
         "config": {
-            "sender": cfg["sender"],
-            "server": cfg["server"],
-            "port": cfg["port"],
-            "password_set": bool(cfg["password"]),
+            "api_key_set": bool(cfg["api_key"]),
+            "from": cfg["from"],
         }
     }
-    if not cfg["password"]:
-        result["error"] = "SENDER_PASSWORD not set"
+    if not cfg["api_key"]:
+        result["error"] = "RESEND_API_KEY not set"
         return result
 
-    import smtplib
-    import socket
-
-    # Test DNS resolution
     try:
-        ip = socket.getaddrinfo(cfg["server"], cfg["port"])[0][4][0]
-        result["dns"] = f"{cfg['server']} → {ip}"
-    except Exception as e:
-        result["dns_error"] = str(e)
-        return result
-
-    # Test SMTP connection
-    try:
-        if cfg["port"] == 465:
-            server = smtplib.SMTP_SSL(cfg["server"], cfg["port"], timeout=15)
-        else:
-            server = smtplib.SMTP(cfg["server"], cfg["port"], timeout=15)
-            server.starttls()
-        result["connect"] = "OK"
-    except Exception as e:
-        result["connect_error"] = str(e)
-        return result
-
-    # Test login
-    try:
-        server.login(cfg["sender"], cfg["password"])
-        result["login"] = "OK"
-    except Exception as e:
-        result["login_error"] = str(e)
-        server.quit()
-        return result
-
-    # Test send
-    try:
-        from email.mime.text import MIMEText
-        msg = MIMEText("This is a diagnostic test from the BaZi server.")
-        msg["Subject"] = "Diagnostic test from Railway"
-        msg["From"] = cfg["sender"]
-        msg["To"] = cfg["sender"]
-        server.send_message(msg)
+        import resend
+        resend.api_key = cfg["api_key"]
+        r = resend.Emails.send({
+            "from": cfg["from"],
+            "to": [cfg["from"]],
+            "subject": "Diagnostic test from Railway",
+            "text": "If you see this, Resend is working on Railway.",
+        })
         result["send"] = "OK"
+        result["email_id"] = r.get("id", "?")
     except Exception as e:
-        result["send_error"] = str(e)
-    finally:
-        server.quit()
+        result["error"] = str(e)
 
     return result
 
