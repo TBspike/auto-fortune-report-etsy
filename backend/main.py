@@ -348,7 +348,17 @@ def process_gumroad_order(order: OrderData):
     if pdf_path:
         download_url = f"{REPORT_BASE_URL}/download/{order.order_id}"
         logger.info(f"Gumroad report generated for order {order.order_id}: {download_url}")
-        # Email delivery will be added later
+        for attempt in range(3):
+            try:
+                send_report_email(
+                    to_email=order.buyer_email,
+                    download_url=download_url,
+                    order_id=order.order_id,
+                    client_name=order.client_name,
+                )
+                break
+            except Exception as e:
+                logger.warning(f"Email attempt {attempt+1} failed: {e}")
     else:
         logger.error(f"Failed to generate Gumroad report for order {order.order_id}")
 
