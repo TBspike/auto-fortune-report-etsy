@@ -1,16 +1,23 @@
-# Stage 1: Install Playwright browsers
-FROM python:3.11-slim as playwright-deps
-RUN pip install playwright
-RUN python3 -m playwright install chromium
-RUN python3 -m playwright install-deps chromium
-
-# Stage 2: Runtime
 FROM python:3.11-slim
+
+# Install Chromium system dependencies
+RUN apt-get update && apt-get install -y \
+    libnss3 libnspr4 libatk1.0-0t64 libatk-bridge2.0-0t64 \
+    libcups2t64 libdrm2 libdbus-1-3 libexpat1 libxcb1 \
+    libxkbcommon0 libx11-6 libxcomposite1 libxdamage1 \
+    libxext6 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 \
+    libcairo2 libasound2t64 libegl1 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
-COPY --from=playwright-deps /root/.cache /root/.cache
+
 COPY backend/requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Playwright and Chromium
+RUN pip install playwright && python3 -m playwright install chromium
+
 COPY backend/ .
-RUN python3 -c "import playwright; print('playwright OK')"
+
 EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
